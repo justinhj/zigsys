@@ -17,6 +17,32 @@ pub fn main() !void {
     for (args) |arg| try writer.interface.print("{s}\n", .{arg});
     try writer.interface.flush();
 
+    // Wait for a timer bsd
+    const kq = std.c.kqueue();
+    if(kq == -1) {
+        std.c.exit(kq);
+    }
+    defer _ = std.c.close(kq); // TODO is this the right close?
+
+    const timer_seconds = 5;
+
+    const change_event : std.c.Kevent = .{
+        .ident = 1,
+        .filter = std.c.EVFILT.TIMER,
+        .flags = std.c.EV.ENABLE | std.c.EV.ADD,
+        .data = timer_seconds * 1000,
+        .fflags = 0, // not used here
+        .udata = 0,
+    };
+    const change_events = [_]std.c.Kevent {change_event};
+
+    var triggered_event : [1]std.c.Kevent = undefined;
+
+    std.debug.print("Registering a {d} second timer with kqueue and waiting...\n", .{timer_seconds});
+
+    const num_events = std.c.kevent(kq, &change_events, 1, &triggered_event, 1, null);
+
+    std.debug.print("Received {d} events ...\n", .{num_events});
 }
 
 test "simple test" {
