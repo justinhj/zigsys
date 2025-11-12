@@ -1,7 +1,9 @@
 const std = @import("std");
 const zigsys = @import("zigsys");
+const uv = @cImport(@cInclude("uv.h"));
 
-pub fn main() !void {
+// Writing the file arguments to a file
+fn create_file() void {
     var file = try std.fs.cwd().createFile("./hello.txt", .{ .read = false, .truncate = true });
     defer file.close();
 
@@ -16,7 +18,10 @@ pub fn main() !void {
 
     for (args) |arg| try writer.interface.print("{s}\n", .{arg});
     try writer.interface.flush();
+}
 
+// Waiting for a timer with kqueue
+fn kqueue_wait() void {
     // Wait for a timer bsd
     const kq = std.c.kqueue();
     if(kq == -1) {
@@ -43,15 +48,45 @@ pub fn main() !void {
     const num_events = std.c.kevent(kq, &change_events, 1, &triggered_event, 1, null);
 
     std.debug.print("Received {d} events ...\n", .{num_events});
+
 }
 
-test "simple test" {
-    const gpa = std.testing.allocator;
-    var list: std.ArrayList(i32) = .empty;
-    defer list.deinit(gpa); // Try commenting this out and see if zig detects the memory leak!
-    try list.append(gpa, 42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+fn timer_callback(handle : *uv.uv_timer_t) callconv(.c) void {
+    std.debug.print("Timer has fired! Now we can do our work.\n", .{});
+
+    // If you're done with the timer, close it.
+    uv.uv_close(@ptrCast(handle), null);
 }
+
+// wait for a timer using libuv
+fn libuv_timer() void {
+    const loop: *uv.uv_loop_t = uv.uv_default_loop();
+    var my_timer : uv.uv_timer_t = undefined;
+    _ = uv.uv_timer_init(loop, &my_timer); 
+    std.debug.print("Starting a 3-second timer...\n", .{});
+
+    _ = uv.uv_timer_start(&my_timer, @ptrCast(&timer_callback), 3000, 0);
+
+    _ = uv.uv_run(loop, uv.UV_RUN_DEFAULT);
+
+    std.debug.print("Event loop has finished.\n", .{});
+    
+    // Clean up the loop
+    _ = uv.uv_loop_close(loop);
+}
+
+pub fn main() !void {
+    std.debug.print("hello world\n", .{});
+    libuv_timer();
+}
+
+// test "simple test" {
+//     const gpa = std.testing.allocator;
+//     var list: std.ArrayList(i32) = .empty;
+//     defer list.deinit(gpa); // Try commenting this out and see if zig detects the memory leak!
+//     try list.append(gpa, 42);
+//     try std.testing.expectEqual(@as(i32, 42), list.pop());
+// }
 
 // test "fuzz example" {
 //     const Context = struct {
